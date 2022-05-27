@@ -4,9 +4,6 @@
 
 using namespace std;
 
-typedef vector<double> vT;
-typedef vector<int> vi;
-
 void parse(string buffer, int i, Eigen::MatrixXd& df)
 {
     stringstream buff(buffer);
@@ -101,7 +98,6 @@ struct NN
             for (int pos = 0; pos < neta.size(); ++pos)
                 output(pos) = FF(neta(pos));
             output(n_size-1) = 1;
-            // cout << "output\n\t" << output << endl;
         }
         cout << "\tFORWARD: " << output << endl;
         return output;
@@ -123,31 +119,18 @@ int main()
         cin >> nph[i];
     cin >> O;
     // cout << nph << endl;
-
-    auto nn = NN(I, NH, nph, O, sigmoid);
-    cout << "Initialized\n";
-
     Eigen::MatrixXd fv(1, I + 1);
     for (int i = 0; i < I; ++i)
         cin >> fv(i);
     fv(I) = 1;
-
-    // cout << fv.size() << endl;
     // cout << fv << endl;
-    nn.run(fv);
-
+    
     // auto csv = readCSV("test_data.csv", 4, 10);
     // cout << csv;
-    
-    // Eigen::MatrixXd m(2,2);
-    // m(0,0) = 3;
-    // m(1,0) = 2.5;
-    // m(0,1) = -1;
-    // m(1,1) = m(1,0) + m(0,1);
-    // cout << m << std::endl;
-    // parse("30,64,1,1", 0);
-    // parse("30.5,64.3423,1.457,1.9894", 1);
-    // cout << readCSV("test_data.csv", 10, 4) << '\n';
+
+    auto nn = NN(I, NH, nph, O, sigmoid);
+    cout << "Initialized\n";
+    nn.run(fv);
     cout << "Done\n";
     return 0;
 }
