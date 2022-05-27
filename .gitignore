@@ -1,0 +1,5 @@
+Eigen/
+*.exe
+.vscode/
+*.csv
+*.txt
