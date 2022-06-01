@@ -134,3 +134,15 @@ int main()
     cout << "Done\n";
     return 0;
 }
+
+
+/*
+https://stackoverflow.com/questions/21516575/fill-a-vector-with-random-numbers-c
+https://eigen.tuxfamily.org/dox/group__TutorialMatrixArithmetic.html
+https://stackoverflow.com/questions/29231798/eigen-how-to-make-a-deep-copy-of-a-matrix
+https://stackoverflow.com/questions/61307903/how-do-i-assign-eigeneigensolvermatrixxd-esmatrix-to-a-variable-that-i-c
+
+https://java2blog.com/fill-array-with-random-numbers-cpp/
+https://gist.github.com/zodsoft/52c738e60c264bdb2a5967b5ca0d8de6
+
+*/

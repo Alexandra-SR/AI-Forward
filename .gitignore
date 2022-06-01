@@ -1,5 +1,6 @@
 Eigen/
 *.exe
 .vscode/
-*.csv
 *.txt
+*.zip
+leedsbutterfly/
