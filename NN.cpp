@@ -144,5 +144,13 @@ https://stackoverflow.com/questions/61307903/how-do-i-assign-eigeneigensolvermat
 
 https://java2blog.com/fill-array-with-random-numbers-cpp/
 https://gist.github.com/zodsoft/52c738e60c264bdb2a5967b5ca0d8de6
+*/
 
+
+/*
+- capas de entrada = tamaño de vector caracteristica
+- capa de salida 1*10 (#clases)
+- stochastic gradient descent y mini batch(tensores + error promedio)
+- plotting terminal en linux
+- hilos y concurrencia
 */
