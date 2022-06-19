@@ -11,17 +11,36 @@
 using namespace std;
 using namespace boost::numeric::ublas;
 
-
-
 random_device rd;
 seed_seq ssq{rd()};
 default_random_engine eng{rd()};    
-uniform_real_distribution<double> dist(-9e-1, 9e-1);
+uniform_real_distribution<double> dist(-7e-1, 7e-1);
 
 
 int RNG(int first, int last)
 {
     return first + rand() % (last + 1 - first);
+}
+
+std::unordered_set<int> pickSet(int N, int k, std::mt19937& gen)
+{
+    std::uniform_int_distribution<> dis(1, N);
+    std::unordered_set<int> elems;
+
+    while (elems.size() < k) {
+        elems.insert(dis(gen));
+    }
+
+    return elems;
+}
+
+std::vector<int> pick(int N, int k) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::unordered_set<int> elems = pickSet(N, k, gen);
+    std::vector<int> result(elems.begin(), elems.end());
+    std::shuffle(result.begin(), result.end(), gen);
+    return result;
 }
 
 
@@ -231,7 +250,7 @@ struct MLP
     std::vector<matrix<double>> delta, S, bias;
     std::vector<string> activ;
     string error_func = "cross-entropy";
-    double learning_rate = 1e-6, lambda = 1, betha1=0.9, betha2=0.999, eps=1e-8;
+    double learning_rate = 1e-6, lambda = 1, betha1=0.9, betha2=0.999, eps=1e-8, batch_size=64;
 
     MLP() = default;
     
@@ -269,21 +288,41 @@ struct MLP
     {
         matrix<double> X = this->data["X"], Y = this->data["Y"];
         int rX = X.size1(), cX = X.size2(), rY = Y.size1(), cY = Y.size2();
-        int index = 0.8*rX;
+        int index = 0.1*rX;
 
-        this->data["X_train"] = subrange(X, 0, index, 0, cX);
-        this->data["Y_train"] = subrange(Y, 0, index, 0, cY);
+        this->data["X_validation"] = subrange(X, 0, index, 0, cX);
+        this->data["Y_validation"] = subrange(Y, 0, index, 0, cY);
         
-        this->data["X_test"] = subrange(X, index, int(0.9*rX), 0, cX);
-        this->data["Y_test"] = subrange(Y, index, int(0.9*rX), 0, cY);
+        this->data["X_train"] = subrange(X, index, int(0.9*rX), 0, cX);
+        this->data["Y_train"] = subrange(Y, index, int(0.9*rX), 0, cY);
 
-        this->data["X_validation"] = subrange(X, int(0.9*rX), rX, 0, cX);
-        this->data["Y_validation"] = subrange(Y, int(0.9*rX), rX, 0, cY);
+        this->data["X_test"] = subrange(X, int(0.9*rX), rX, 0, cX);
+        this->data["Y_test"] = subrange(Y, int(0.9*rX), rX, 0, cY);
     }
 
     void f_act(matrix<double>& fv, int i)
     {
         activation_function[activ[i]](fv);
+    }
+
+    pair<matrix<double>, matrix<double>> get_batch()
+    {
+        auto [rx, cX] = get_shape(data["X_train"]);
+        auto [rY, cY] = get_shape(data["Y_train"]);
+        matrix<double> x_batch(batch_size, cX), y_batch(batch_size, cY);
+        auto rndm_idx = pick(data["X_train"].size1()-1, batch_size);
+
+        int b_idx = 0;
+        for (int idx : rndm_idx)
+        {
+            for (int i = 0; i < cX; i++)
+                x_batch(b_idx, i) = data["X_train"](idx, i);
+            for (int i = 0; i < cY; i++)
+                y_batch(b_idx, i) = data["Y_train"](idx, i);
+            b_idx++;
+        }
+        
+        return make_pair(x_batch, y_batch);
     }
 
     matrix<double> forward(matrix<double> XX)
@@ -371,18 +410,19 @@ struct MLP
         int i = 0;
         while (true)
         {
-            matrix<double> f = forward(data["X_train"]);
-            backward(f, data["Y_train"]);
-            auto train_err = accuracy(f, data["Y_train"]), val_err = validation();
+            auto [x_batch, y_batch] = this->get_batch();
+            matrix<double> f = forward(x_batch);
+            backward(f, y_batch);
+            auto train_err = accuracy(f, y_batch), val_err = validation();
             ERROR_STREAM << fixed << setprecision(3) << train_err << ", " << val_err << endl;
-            if (i % 500 == 0)
+            if (i % 250 == 0)
                 cout << fixed << setprecision(3) << train_err << ", " << val_err << endl;
             if (train_err < 0.05)
                     break;
             i++;
         }
 
-        cout << fixed << setprecision(3) << forward(data["X_train"]) << endl << data["Y_train"] << endl;
+        // cout << fixed << setprecision(3) << forward(data["X_train"]) << endl << data["Y_train"] << endl;
 
         for (int i = 0; i < W.size(); ++i)
             export_(MODEL_PATH+"W_"+to_string(i)+".txt", W[i]);
@@ -391,12 +431,57 @@ struct MLP
             export_(MODEL_PATH+"bias_"+to_string(i)+".txt", bias[i]);
     }
 
-    void conf_matrix(matrix<double> data)
+    matrix<double> to_zero_ones(matrix<double> mat)
     {
-        
+        auto [r, c] = get_shape(mat);
+        for (int i=0; i<r; i++)
+        {
+            int idx_max = 0;
+            for (int j=1; j<c; j++)
+                if (mat(i, j) > mat(i, idx_max))
+                    idx_max = j;
+            for (int j=0; j<c; j++)
+            {
+                if (j==idx_max) mat(i,j) = 1;
+                else mat(i,j) = 0;
+            }       
+        }
+        return mat;
     }
 
-    void test()
+    int get_class(matrix<double> Y)
+    {
+        auto [r, c] = get_shape(Y);
+        for (int i=0; i<c; i++)
+            if (Y(i) >= 0.99)
+            return i;
+    }
+
+    void save_conf_matrix(string label)
+    {
+        matrix<double> conf_matrix(10, 10, 0);
+        matrix<double> Y_expected = data["Y_"+label], X = data["X_"+label];
+        auto [r, c] = get_shape(Y_expected);
+        auto [rX, cX] = get_shape(X);
+        for (int i = 0; i < r; ++i)
+        {
+            matrix<double> Y_ex(1, c, 0), X_curr(1, cX, 0);
+            for (int j=0; j<c; j++)
+                Y_ex(j) = Y_expected(i, j); 
+            for (int j=0; j<cX; j++)
+                X_curr(j) = X(i, j); 
+
+            auto coord_row = get_class(Y_ex), coord_col = get_class(to_zero_ones(forward(X_curr)));
+            conf_matrix(coord_row, coord_col) += 1;
+        }
+        int correctas = 0;
+        for (int i = 0; i < 10; ++i)
+            correctas += int(conf_matrix(i, i));
+        cout << "accuracy: " << correctas*100/r << " %\n";
+        cout << conf_matrix << endl;
+        // export_(MODEL_PATH+"test_confusion_matrix_" + label + ".txt", conf_matrix);
+    }
+    void test() 
     {
         for (int i = 0; i < W.size(); ++i)
             import_(MODEL_PATH+"W_"+to_string(i)+".txt", W[i]);
@@ -404,8 +489,9 @@ struct MLP
         for (int i = 0; i < bias.size(); ++i)
             import_(MODEL_PATH+"bias_"+to_string(i)+".txt", bias[i]);
         
-        matrix<double> train_confusion_matrix(10, 10, 0);
-        export_(MODEL_PATH+"test_confusion_matrix.txt", train_confusion_matrix);
+        save_conf_matrix("train");
+        save_conf_matrix("test");
+        save_conf_matrix("validation");
     }
 };
 
@@ -429,8 +515,21 @@ void fit(MLP* mlp, int sample)
     mlp->train();
 }
 
-void test(MLP* mlp)
+
+void test(MLP* mlp, int sample=100)
 {
+    
+    string xx = DATA_PATH + "leedsbutterfly_6_stratified.csv", yy = DATA_PATH + "y_expected_stratified.csv";
+    matrix<double> X = read_csv(xx, sample), Y = read_csv(yy, sample);
+    
+    std::vector<int> npl = {100, 90, 70, 50, 30, 20, 10};
+    std::vector<string> fact = {"", "relu", "relu", "relu", "relu", "relu", "soft-max"};
+    
+    mlp->data["X"] = X;
+    mlp->data["Y"] = Y;
+
+    mlp->setup(npl, fact);
+    mlp->split_data();
     mlp->test();
 }
 
@@ -443,16 +542,25 @@ int main()
     ios::sync_with_stdio(0);
     cin.tie(0);
 
-    std::vector<int> samples = {100, 250, 500};
+    
+    std::vector<int> samples = {100};
 
     for (const auto& s : samples)
     {
-        MODEL_PATH = "./model_" + to_string(s) + "/";
+        MODEL_PATH = "./model_100_5_layers/";
         cout << MODEL_PATH << endl;
         auto mlp = new MLP();
 
         ERROR_STREAM = ofstream(MODEL_PATH + "error.csv", ios::out);
         fit(mlp, s);
         ERROR_STREAM.close();
+    }
+
+    for (const auto& s : samples)
+    {
+        MODEL_PATH = "./model_" + to_string(s) + "_/";
+        auto mlp = new MLP();
+        // test(mlp);
+        test(mlp, s);
     }
 }
